@@ -97,6 +97,27 @@ body {
   to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* ── Auth Modal (dismissable) ─────────────────────────────────────────────── */
+.auth-modal {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(6px);
+  background: rgba(0,0,0,0.72);
+  padding: 1rem;
+  animation: fadeIn 0.2s ease;
+}
+
+.auth-close {
+  position: absolute; top: 1rem; right: 1rem;
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted); cursor: pointer;
+  padding: 0.35rem; display: flex; align-items: center; justify-content: center;
+  transition: all var(--t-fast);
+}
+.auth-close svg { width: 16px; height: 16px; }
+.auth-close:hover { color: var(--text-primary); background: var(--bg-overlay); }
+
 /* Auth Brand */
 .auth-brand {
   text-align: center; margin-bottom: 2rem;
@@ -273,7 +294,6 @@ body {
   display: flex; align-items: center; gap: 0.75rem;
   padding: 1rem 1.25rem;
   border-top: 1px solid var(--border);
-  margin-top: auto;
 }
 
 .sidebar-avatar {
@@ -301,6 +321,73 @@ body {
 
 .btn-logout svg { width: 18px; height: 18px; }
 .btn-logout:hover { color: var(--red); background: rgba(244,63,94,0.1); }
+
+/* Sidebar guest sign-in button */
+.sidebar-guest {
+  padding: 1rem 0.75rem;
+  border-top: 1px solid var(--border);
+  margin-top: auto;
+}
+
+.btn-signin-sidebar {
+  width: 100%;
+  display: flex; align-items: center; gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, rgba(168,85,247,0.15), rgba(236,72,153,0.10));
+  border: 1px solid rgba(168,85,247,0.25);
+  border-radius: var(--radius-md);
+  color: var(--text-primary); font-size: 0.9rem; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.btn-signin-sidebar svg { width: 20px; height: 20px; flex-shrink: 0; }
+
+.btn-signin-sidebar:hover {
+  background: linear-gradient(135deg, rgba(168,85,247,0.25), rgba(236,72,153,0.18));
+  border-color: rgba(168,85,247,0.5);
+}
+
+/* Guest CTA in feed */
+.guest-cta {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.guest-cta p {
+  font-size: 0.95rem; font-weight: 600; color: var(--text-primary);
+}
+
+.guest-cta-actions { display: flex; gap: 0.6rem; flex-shrink: 0; }
+
+.btn-cta-primary {
+  padding: 0.5rem 1.1rem;
+  background: linear-gradient(135deg, var(--accent-from), var(--accent-to));
+  border: none; border-radius: var(--radius-full);
+  color: white; font-size: 0.825rem; font-weight: 600;
+  font-family: inherit; cursor: pointer;
+  transition: all var(--t-fast);
+  box-shadow: 0 2px 12px rgba(168,85,247,0.3);
+}
+
+.btn-cta-primary:hover { transform: scale(1.04); box-shadow: 0 4px 18px rgba(168,85,247,0.45); }
+
+.btn-cta-secondary {
+  padding: 0.5rem 1.1rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  color: var(--text-secondary); font-size: 0.825rem; font-weight: 500;
+  font-family: inherit; cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.btn-cta-secondary:hover { border-color: var(--border-hover); color: var(--text-primary); }
 
 /* Main Content */
 .main-content {
@@ -429,6 +516,13 @@ body {
 @keyframes threadIn {
   from { opacity: 0; transform: translateY(8px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Highlight newly auto-injected threads */
+.thread-new {
+  background: rgba(168,85,247,0.07);
+  border-left: 2px solid var(--accent-from);
+  transition: background 1.5s ease, border-color 1.5s ease;
 }
 
 .thread-card:hover { background: rgba(255,255,255,0.02); }
@@ -613,6 +707,31 @@ body {
 @keyframes toastIn {
   from { opacity: 0; transform: translateX(-50%) translateY(12px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* New-threads Banner */
+.new-threads-banner {
+  display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+  margin-bottom: 1rem; padding: 0.65rem 1.25rem;
+  background: linear-gradient(135deg, rgba(168,85,247,0.18), rgba(236,72,153,0.14));
+  border: 1px solid rgba(168,85,247,0.35);
+  border-radius: var(--radius-full);
+  color: var(--accent-from); font-size: 0.875rem; font-weight: 600;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  animation: bannerIn 0.3s ease;
+}
+
+.new-threads-banner:hover {
+  background: linear-gradient(135deg, rgba(168,85,247,0.28), rgba(236,72,153,0.22));
+  border-color: rgba(168,85,247,0.6);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(168,85,247,0.25);
+}
+
+@keyframes bannerIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
 /* Utility */

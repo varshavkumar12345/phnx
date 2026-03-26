@@ -2,51 +2,103 @@
    PHNX — App Logic
    ============================================================ */
 
-const API = '';          // Flask runs on same origin
-let currentUser  = null;
-let currentPage  = 1;
-let totalThreads = 0;
-let isLoading    = false;
-const LIMIT      = 20;
+const API = '';
+let currentUser   = null;
+let currentPage   = 1;
+let totalThreads  = 0;
+let isLoading     = false;
+let latestId      = 0;
+let pollInterval  = null;
+const LIMIT       = 20;
+const POLL_MS     = 3000;
 
-/* ─── Init ──────────────────────────────────────────────────── */
+/* ─── Init ─────────────────────────────────────────────────── */
 document.addEventListener('DOMContentLoaded', async () => {
-  await checkAuth();
+  await checkAuth();       // try to restore session — non-blocking
+  loadFeed(true);          // always load feed, auth or not
+  startPolling();
   setupNavigation();
 });
 
+/* ─── Check Session ─────────────────────────────────────────── */
 async function checkAuth() {
   try {
-    const res  = await fetch(`${API}/api/me`, { credentials: 'include' });
+    const res = await fetch(`${API}/api/me`, { credentials: 'include' });
     if (res.ok) {
       currentUser = await res.json();
-      enterApp();
+      onUserLoggedIn();
     } else {
-      showAuthOverlay();
+      onUserGuest();
     }
   } catch {
-    showAuthOverlay();
+    onUserGuest();
   }
 }
 
-/* ─── Auth Overlay ──────────────────────────────────────────── */
-function showAuthOverlay() {
-  document.getElementById('auth-overlay').classList.remove('hidden');
-  document.getElementById('app').classList.add('hidden');
+/* ─── UI State: Logged In ────────────────────────────────────── */
+function onUserLoggedIn() {
+  const avatar = currentUser.avatar ||
+    `https://api.dicebear.com/7.x/lorelei/svg?seed=${currentUser.username}`;
+
+  // Sidebar: show user, hide guest
+  document.getElementById('sidebar-user').classList.remove('hidden');
+  document.getElementById('sidebar-guest').classList.add('hidden');
+  document.getElementById('nav-profile').classList.remove('hidden');
+  document.getElementById('sidebar-avatar').src = avatar;
+  document.getElementById('sidebar-username').textContent = '@' + currentUser.username;
+
+  // Feed: show compose, hide guest CTA
+  document.getElementById('compose-box').classList.remove('hidden');
+  document.getElementById('guest-cta').classList.add('hidden');
+  document.getElementById('compose-avatar').src = avatar;
+
+  // Profile view data
+  document.getElementById('profile-avatar').src = avatar;
+  document.getElementById('profile-username').textContent = currentUser.username;
+  document.getElementById('profile-handle').textContent   = '@' + currentUser.username;
+
+  // Always go to Home tab so user sees ALL posts
+  switchView('feed');
 }
 
-function enterApp() {
-  document.getElementById('auth-overlay').classList.add('hidden');
-  document.getElementById('app').classList.remove('hidden');
-  populateSidebar();
-  loadFeed(true);
+/* ─── UI State: Guest ────────────────────────────────────────── */
+function onUserGuest() {
+  // Sidebar: hide user, show guest sign-in button
+  document.getElementById('sidebar-user').classList.add('hidden');
+  document.getElementById('sidebar-guest').classList.remove('hidden');
+  document.getElementById('nav-profile').classList.add('hidden');
+
+  // Feed: hide compose, show guest CTA
+  document.getElementById('compose-box').classList.add('hidden');
+  document.getElementById('guest-cta').classList.remove('hidden');
+}
+
+/* ─── Auth Modal ─────────────────────────────────────────────── */
+function openAuthModal(tab = 'login') {
+  switchTab(tab);
+  clearErrors();
+  document.getElementById('auth-modal').classList.remove('hidden');
+
+  // Update tagline based on context
+  const tagline = document.getElementById('auth-tagline');
+  tagline.textContent = tab === 'register'
+    ? 'Create an account to start posting'
+    : 'Sign in to post a thread';
+}
+
+function closeAuthModal() {
+  document.getElementById('auth-modal').classList.add('hidden');
+}
+
+function closeModalOnBackdrop(e) {
+  if (e.target.id === 'auth-modal') closeAuthModal();
 }
 
 function switchTab(tab) {
-  const loginForm  = document.getElementById('login-form');
-  const regForm    = document.getElementById('register-form');
-  const tabLogin   = document.getElementById('tab-login');
-  const tabReg     = document.getElementById('tab-register');
+  const loginForm = document.getElementById('login-form');
+  const regForm   = document.getElementById('register-form');
+  const tabLogin  = document.getElementById('tab-login');
+  const tabReg    = document.getElementById('tab-register');
 
   if (tab === 'login') {
     loginForm.classList.remove('hidden');
@@ -62,7 +114,7 @@ function switchTab(tab) {
   clearErrors();
 }
 
-/* ─── Login ─────────────────────────────────────────────────── */
+/* ─── Login ──────────────────────────────────────────────────── */
 async function handleLogin(e) {
   e.preventDefault();
   const btn      = document.getElementById('login-btn');
@@ -81,8 +133,10 @@ async function handleLogin(e) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Login failed');
+
     currentUser = data.user;
-    enterApp();
+    closeAuthModal();
+    onUserLoggedIn();
     showToast('Welcome back, @' + currentUser.username + '!', 'success');
   } catch (err) {
     showError(errEl, err.message);
@@ -91,7 +145,7 @@ async function handleLogin(e) {
   }
 }
 
-/* ─── Register ──────────────────────────────────────────────── */
+/* ─── Register ───────────────────────────────────────────────── */
 async function handleRegister(e) {
   e.preventDefault();
   const btn      = document.getElementById('register-btn');
@@ -111,9 +165,11 @@ async function handleRegister(e) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Registration failed');
+
     currentUser = data.user;
-    enterApp();
-    showToast('Account created! Welcome, @' + currentUser.username + ' 🎉', 'success');
+    closeAuthModal();
+    onUserLoggedIn();
+    showToast('Welcome to PHNX, @' + currentUser.username + ' 🎉', 'success');
   } catch (err) {
     showError(errEl, err.message);
   } finally {
@@ -123,25 +179,18 @@ async function handleRegister(e) {
 
 /* ─── Logout ─────────────────────────────────────────────────── */
 async function handleLogout() {
+  stopPolling();
   await fetch(`${API}/api/logout`, { method: 'POST', credentials: 'include' });
-  currentUser = null;
-  currentPage = 1;
+  currentUser  = null;
+  currentPage  = 1;
   totalThreads = 0;
-  document.getElementById('threads-feed').innerHTML = '';
-  showAuthOverlay();
-  showToast('Logged out', 'success');
-}
+  latestId     = 0;
 
-/* ─── Sidebar ────────────────────────────────────────────────── */
-function populateSidebar() {
-  if (!currentUser) return;
-  const avatar   = currentUser.avatar || `https://api.dicebear.com/7.x/lorelei/svg?seed=${currentUser.username}`;
-  document.getElementById('sidebar-avatar').src  = avatar;
-  document.getElementById('sidebar-username').textContent = '@' + currentUser.username;
-  document.getElementById('compose-avatar').src  = avatar;
-  document.getElementById('profile-avatar').src  = avatar;
-  document.getElementById('profile-username').textContent = currentUser.username;
-  document.getElementById('profile-handle').textContent   = '@' + currentUser.username;
+  onUserGuest();
+  switchView('feed');
+  loadFeed(true);
+  startPolling();
+  showToast('Logged out', 'success');
 }
 
 /* ─── Navigation ─────────────────────────────────────────────── */
@@ -152,6 +201,7 @@ function setupNavigation() {
   });
   document.getElementById('nav-profile').addEventListener('click', e => {
     e.preventDefault();
+    if (!currentUser) return openAuthModal('login');
     switchView('profile');
     loadProfileThreads();
   });
@@ -161,25 +211,25 @@ function switchView(view) {
   document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(`view-${view}`).classList.remove('hidden');
-  document.getElementById(`nav-${view}`).classList.add('active');
+  document.getElementById(`nav-${view}`)?.classList.add('active');
 }
 
-/* ─── Feed ───────────────────────────────────────────────────── */
+/* ─── Feed (public — no auth needed) ────────────────────────── */
 async function loadFeed(reset = false) {
   if (isLoading) return;
   if (reset) {
     currentPage  = 1;
     totalThreads = 0;
+    latestId     = 0;
     document.getElementById('threads-feed').innerHTML = '';
     document.getElementById('feed-loading').classList.remove('hidden');
     document.getElementById('load-more-wrap').classList.add('hidden');
   }
 
   isLoading = true;
-
   try {
     const res  = await fetch(`${API}/api/threads?page=${currentPage}&limit=${LIMIT}`, {
-      credentials: 'include'
+      credentials: 'include'   // sends session cookie if present (for liked state)
     });
     const data = await res.json();
     totalThreads = data.total;
@@ -194,10 +244,12 @@ async function loadFeed(reset = false) {
           <p>No threads yet. Be the first to post!</p>
         </div>`;
     } else {
-      data.threads.forEach(t => feed.appendChild(buildThreadCard(t)));
+      data.threads.forEach(t => {
+        feed.appendChild(buildThreadCard(t));
+        if (t.id > latestId) latestId = t.id;
+      });
     }
 
-    // Show or hide Load More
     const loaded = (currentPage - 1) * LIMIT + data.threads.length;
     if (loaded < totalThreads) {
       document.getElementById('load-more-wrap').classList.remove('hidden');
@@ -214,12 +266,12 @@ async function loadFeed(reset = false) {
   }
 }
 
-async function loadMore() {
-  await loadFeed(false);
-}
+async function loadMore() { await loadFeed(false); }
 
-/* ─── Post Thread ────────────────────────────────────────────── */
+/* ─── Post Thread (requires auth) ───────────────────────────── */
 async function postThread() {
+  if (!currentUser) return openAuthModal('login');
+
   const input   = document.getElementById('compose-input');
   const content = input.value.trim();
 
@@ -244,12 +296,12 @@ async function postThread() {
     document.getElementById('char-count').textContent = '500';
     document.getElementById('char-count').className = 'char-count';
 
-    // Inject at top of feed
-    const feed = document.getElementById('threads-feed');
+    const feed  = document.getElementById('threads-feed');
     const empty = feed.querySelector('.empty-state');
     if (empty) empty.remove();
     feed.insertBefore(buildThreadCard(data), feed.firstChild);
     totalThreads++;
+    if (data.id > latestId) latestId = data.id;
 
     showToast('Thread posted! 🚀', 'success');
   } catch (err) {
@@ -260,14 +312,13 @@ async function postThread() {
   }
 }
 
-/* ─── Like ───────────────────────────────────────────────────── */
+/* ─── Like (requires auth) ───────────────────────────────────── */
 async function toggleLike(threadId, btn) {
-  if (!currentUser) return showToast('Sign in to like threads', 'error');
+  if (!currentUser) return openAuthModal('login');
 
   const countEl = btn.querySelector('.like-count');
   const isLiked = btn.classList.contains('liked');
 
-  // Optimistic
   btn.classList.toggle('liked');
   countEl.textContent = parseInt(countEl.textContent) + (isLiked ? -1 : 1);
 
@@ -280,7 +331,6 @@ async function toggleLike(threadId, btn) {
     countEl.textContent = data.like_count;
     if (data.liked) btn.classList.add('liked'); else btn.classList.remove('liked');
   } catch {
-    // Revert
     btn.classList.toggle('liked');
     countEl.textContent = parseInt(countEl.textContent) + (isLiked ? 1 : -1);
     showToast('Could not toggle like', 'error');
@@ -290,9 +340,8 @@ async function toggleLike(threadId, btn) {
 /* ─── Delete Thread ──────────────────────────────────────────── */
 async function deleteThread(threadId, cardEl) {
   if (!confirm('Delete this thread?')) return;
-
   try {
-    const res  = await fetch(`${API}/api/threads/${threadId}`, {
+    const res = await fetch(`${API}/api/threads/${threadId}`, {
       method: 'DELETE', credentials: 'include'
     });
     if (!res.ok) throw new Error('Delete failed');
@@ -311,14 +360,11 @@ async function deleteThread(threadId, cardEl) {
 async function loadProfileThreads() {
   const container = document.getElementById('profile-threads');
   container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading…</p></div>`;
-
   try {
-    const res   = await fetch(`${API}/api/threads?limit=100`, { credentials: 'include' });
-    const data  = await res.json();
-    const mine  = data.threads.filter(t => t.user_id === currentUser.id);
-
+    const res  = await fetch(`${API}/api/threads?limit=100`, { credentials: 'include' });
+    const data = await res.json();
+    const mine = data.threads.filter(t => t.user_id === currentUser.id);
     document.getElementById('stat-threads').textContent = mine.length;
-
     container.innerHTML = '';
     if (mine.length === 0) {
       container.innerHTML = `<div class="empty-state"><span class="empty-icon">📝</span><p>No threads yet. Share something!</p></div>`;
@@ -332,8 +378,8 @@ async function loadProfileThreads() {
 
 /* ─── Build Thread Card ──────────────────────────────────────── */
 function buildThreadCard(thread) {
-  const isOwn  = currentUser && thread.user_id === currentUser.id;
-  const card   = document.createElement('div');
+  const isOwn = currentUser && thread.user_id === currentUser.id;
+  const card  = document.createElement('div');
   card.className = 'thread-card';
   card.id        = `thread-${thread.id}`;
 
@@ -368,6 +414,47 @@ function buildThreadCard(thread) {
   return card;
 }
 
+/* ─── Live Polling (auto-inject, no auth needed) ─────────────── */
+function startPolling() {
+  stopPolling();
+  pollInterval = setInterval(pollNewThreads, POLL_MS);
+}
+
+function stopPolling() {
+  if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+}
+
+async function pollNewThreads() { // newest-on-top fix applied
+  const feedView = document.getElementById('view-feed');
+  if (!feedView || feedView.classList.contains('hidden')) return;
+  // Note: latestId=0 is intentional — since_id=0 returns ALL threads,
+  // which is correct when the feed starts empty.
+
+  try {
+    const res  = await fetch(`${API}/api/threads?since_id=${latestId}`, { credentials: 'include' });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.threads || data.threads.length === 0) return;
+
+    const feed  = document.getElementById('threads-feed');
+    const empty = feed.querySelector('.empty-state');
+    if (empty) empty.remove();
+
+    // API returns ASC (oldest first). insertBefore each: newest inserted last => lands on top.
+    data.threads.forEach(function(t) {
+      if (document.getElementById('thread-' + t.id)) return;
+      var card = buildThreadCard(t);
+      card.classList.add('thread-new');
+      feed.insertBefore(card, feed.firstChild);
+      setTimeout(function() { card.classList.remove('thread-new'); }, 1800);
+      if (t.id > latestId) latestId = t.id;
+    });
+
+
+    totalThreads += data.threads.length;
+  } catch { /* ignore */ }
+}
+
 /* ─── Helpers ────────────────────────────────────────────────── */
 function autoResize(el) {
   el.style.height = 'auto';
@@ -383,12 +470,12 @@ function updateCharCount(el) {
 
 function formatTime(isoStr) {
   if (!isoStr) return '';
-  const d   = new Date(isoStr.replace(' ', 'T') + 'Z');
+  const d    = new Date(isoStr.replace(' ', 'T') + 'Z');
   const now  = new Date();
   const diff = Math.floor((now - d) / 1000);
-  if (diff < 60)   return 'just now';
-  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400)return `${Math.floor(diff/3600)}h ago`;
+  if (diff < 60)    return 'just now';
+  if (diff < 3600)  return `${Math.floor(diff/60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
   if (diff < 604800)return `${Math.floor(diff/86400)}d ago`;
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
@@ -403,15 +490,8 @@ function escHtml(str) {
 
 function setLoading(btn, loading) {
   btn.disabled = loading;
-  const span    = btn.querySelector('span');
-  const spinner = btn.querySelector('.btn-spinner');
-  if (loading) {
-    span?.classList.add('hidden');
-    spinner?.classList.remove('hidden');
-  } else {
-    span?.classList.remove('hidden');
-    spinner?.classList.add('hidden');
-  }
+  btn.querySelector('span')?.classList.toggle('hidden', loading);
+  btn.querySelector('.btn-spinner')?.classList.toggle('hidden', !loading);
 }
 
 function showError(el, msg) {

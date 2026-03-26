@@ -154,9 +154,40 @@ def me():
 
 @app.route('/api/threads', methods=['GET'])
 def get_threads():
-    user_id = current_user()
-    page  = int(request.args.get('page', 1))
-    limit = int(request.args.get('limit', 20))
+    user_id  = current_user()
+    since_id = request.args.get('since_id', type=int)  # for live polling
+
+    # ── Polling mode: only return threads newer than since_id ──
+    if since_id is not None:
+        with get_db() as conn:
+            threads = conn.execute('''
+                SELECT t.id, t.content, t.created_at,
+                       u.username, u.id as user_id,
+                       COUNT(DISTINCT l.id) as like_count
+                FROM threads t
+                JOIN users u ON t.user_id = u.id
+                LEFT JOIN likes l ON t.id = l.thread_id
+                WHERE t.id > ?
+                GROUP BY t.id
+                ORDER BY t.created_at ASC
+            ''', (since_id,)).fetchall()
+
+            liked_ids = set()
+            if user_id:
+                rows = conn.execute('SELECT thread_id FROM likes WHERE user_id = ?', (user_id,)).fetchall()
+                liked_ids = {r['thread_id'] for r in rows}
+
+        result = [{
+            'id': t['id'], 'content': t['content'], 'created_at': t['created_at'],
+            'username': t['username'], 'user_id': t['user_id'],
+            'avatar': get_avatar_url(t['username']),
+            'like_count': t['like_count'], 'liked': t['id'] in liked_ids
+        } for t in threads]
+        return jsonify({'threads': result, 'new_count': len(result)})
+
+    # ── Normal paginated mode ──
+    page   = int(request.args.get('page', 1))
+    limit  = int(request.args.get('limit', 20))
     offset = (page - 1) * limit
 
     with get_db() as conn:
@@ -179,18 +210,12 @@ def get_threads():
 
         total = conn.execute('SELECT COUNT(*) as c FROM threads').fetchone()['c']
 
-    result = []
-    for t in threads:
-        result.append({
-            'id': t['id'],
-            'content': t['content'],
-            'created_at': t['created_at'],
-            'username': t['username'],
-            'user_id': t['user_id'],
-            'avatar': get_avatar_url(t['username']),
-            'like_count': t['like_count'],
-            'liked': t['id'] in liked_ids
-        })
+    result = [{
+        'id': t['id'], 'content': t['content'], 'created_at': t['created_at'],
+        'username': t['username'], 'user_id': t['user_id'],
+        'avatar': get_avatar_url(t['username']),
+        'like_count': t['like_count'], 'liked': t['id'] in liked_ids
+    } for t in threads]
 
     return jsonify({'threads': result, 'total': total, 'page': page})
 
