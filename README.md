@@ -37,6 +37,14 @@ Phnx is an intelligent system designed to combat misinformation by verifying the
    MISTRAL_MODEL=mistral-small-latest
    ```
 
+4. Run the files
+   ```python
+   python web_crawler/web_crawler.py
+   python embedding/embedding.py
+   python transformer/app.py
+   python app.py
+   ```
+
 ## Usage
 
 ### Running the Server
