@@ -431,9 +431,11 @@ async function fetchScore(threadId, btn) {
 
     if (!res.ok || data.error) {
       popup.innerHTML = '<div class="score-error">' + escHtml(data.error || 'Failed to get score') + '</div>';
+    } else if (data.score === null || data.score === undefined) {
+      popup.innerHTML = '<div class="score-error">Could not determine a score — the model response was in an unexpected format.</div>';
     } else {
-      var score  = data.score;
-      var reason = data.reason;
+      var score  = Math.min(100, Math.max(0, parseInt(data.score, 10)));
+      var reason = data.reason || 'No reason provided.';
       var color  = score >= 70 ? '#22c55e' : score >= 40 ? '#f59e0b' : '#f43f5e';
       var label  = score >= 70 ? 'Credible' : score >= 40 ? 'Uncertain' : 'Low credibility';
 

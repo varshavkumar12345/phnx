@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify, session, send_from_directory
 from flask_cors import CORS
+from dotenv import load_dotenv
 import sqlite3
 import hashlib
 import os
@@ -7,8 +8,10 @@ import secrets
 import requests as http_requests
 from datetime import datetime
 
+load_dotenv()
+
 app = Flask(__name__, static_folder='frontend', static_url_path='')
-app.secret_key = secrets.token_hex(32)
+app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(32))
 CORS(app, supports_credentials=True)
 
 DB_PATH = 'phnx.db'
@@ -155,6 +158,36 @@ def me():
 
 @app.route('/api/threads', methods=['GET'])
 def get_threads():
+    # ── User-scoped mode: return only threads by a specific user ──
+    filter_user_id = request.args.get('user_id', type=int)
+    if filter_user_id is not None:
+        with get_db() as conn:
+            threads = conn.execute('''
+                SELECT t.id, t.content, t.created_at,
+                       u.username, u.id as user_id,
+                       COUNT(DISTINCT l.id) as like_count
+                FROM threads t
+                JOIN users u ON t.user_id = u.id
+                LEFT JOIN likes l ON t.id = l.thread_id
+                WHERE t.user_id = ?
+                GROUP BY t.id
+                ORDER BY t.created_at DESC
+            ''', (filter_user_id,)).fetchall()
+
+            user_id = current_user()
+            liked_ids = set()
+            if user_id:
+                rows = conn.execute('SELECT thread_id FROM likes WHERE user_id = ?', (user_id,)).fetchall()
+                liked_ids = {r['thread_id'] for r in rows}
+
+        result = [{
+            'id': t['id'], 'content': t['content'], 'created_at': t['created_at'],
+            'username': t['username'], 'user_id': t['user_id'],
+            'avatar': get_avatar_url(t['username']),
+            'like_count': t['like_count'], 'liked': t['id'] in liked_ids
+        } for t in threads]
+        return jsonify({'threads': result, 'total': len(result), 'page': 1})
+
     user_id  = current_user()
     since_id = request.args.get('since_id', type=int)  # for live polling
 
@@ -304,7 +337,7 @@ def toggle_like(thread_id):
 
 # ─── Information Score (proxies to CredibilityCheckerRAG) ─────────────────────
 
-CREDIBILITY_API = 'http://localhost:8080/api/check'
+CREDIBILITY_API = 'http://localhost:5001/api/check'
 
 @app.route('/api/score', methods=['POST'])
 def get_score():
@@ -346,5 +379,6 @@ def index():
 
 if __name__ == '__main__':
     init_db()
-    print("✨ PHNX running on http://127.0.0.1:5000")
-    app.run(debug=True, port=5000)
+    port = int(os.getenv('PORT', 5000))
+    print(f"✨ PHNX running on http://127.0.0.1:{port}")
+    app.run(debug=os.getenv('FLASK_DEBUG', 'false').lower() == 'true', port=port)

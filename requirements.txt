@@ -1,0 +1,13 @@
+# Core Web Server (Required for GCP)
+flask==3.0.0
+flask-cors==4.0.0
+gunicorn==21.2.0
+requests==2.31.0
+python-dotenv==1.0.0
+scrapy
+
+# AI & Vector DB (Optimized)
+chromadb==0.4.15
+sentence-transformers==2.2.2
+transformers==4.35.2
+huggingface-hub==0.20.1
