@@ -16,7 +16,7 @@ load_dotenv()
 
 EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 COLLECTION_NAME = "news"
-COSINE_THRESHOLD = 0.57
+COSINE_THRESHOLD = 0.25  # Lowered: old embeddings used different text format
 DEFAULT_MODEL = "mistral-small-latest"
 DEFAULT_API_URL = "https://api.mistral.ai/v1/chat/completions"
 DEFAULT_TRUNCATION = 1000
@@ -44,22 +44,49 @@ app = Flask(__name__, static_folder=FRONTEND_DIR, template_folder=FRONTEND_DIR)
 CORS(app)
 
 PROMPT_TEMPLATE = """
-You are a misinformation detection expert.
+You are a news credibility verifier.
 
-You are given news snippets retrieved from a vector database based on the input text provided.
-Use ONLY these snippets as evidence when judging the credibility of that text.
+A user posted the following claim on social media:
+\"\"\"{{claim}}\"\"\"
 
-Snippets:
-\"\"\"{content}\"\"\"
+Below are real news article headlines retrieved from a trusted news database.
+Each headline includes a Similarity score (0.00-1.00) showing how closely it matches the claim — higher means more relevant.
+\"\"\"{{snippets}}\"\"\"
 
-Step 1: Identify if the information in these snippets appears misleading, exaggerated, or false.
-Step 2: Detect patterns typical of misinformation.
-Step 3: Output a credibility score from 0 (false) to 100 (credible) and a reason.
+────────────────────────────────────────────────
+STEP 0 — First, classify the claim into one of these types:
+  A) SCIENTIFIC_FACT   — established science, medicine or health consensus (e.g. "vaccines are effective")
+  B) HISTORICAL_FACT   — a well-known past event (e.g. "Man landed on the moon in 1969")
+  C) CURRENT_EVENT     — a recent news story that requires verification against headlines
+  D) OPINION / OTHER   — subjective statement or general claim
 
-Respond in this format only:
-Credibility Score: <score>
-Reason: <brief reason>
+STEP 1 — Choose your evaluation path based on the type above:
+
+  ► If Type A or B (SCIENTIFIC or HISTORICAL):
+    • Use your own trained knowledge as the PRIMARY signal. Headlines are secondary.
+    • If retrieved headlines are UNRELATED, that is perfectly fine — do NOT lower the score for it.
+    • Score based on whether the claim matches scientific/historical consensus:
+        - Well-established fact / strong consensus  →  85–100
+        - Mostly true but oversimplified or partial →  65–84
+        - Disputed / contested among experts        →  40–64
+        - False or misleading                       →   0–39
+
+  ► If Type C (CURRENT_EVENT):
+    • Retrieved headlines are the PRIMARY signal.
+    • High-similarity headlines (≥ 0.60) that confirm the claim  →  75–100
+    • Headlines partially match or cover a related topic         →  50–74
+    • Headlines fully unrelated (database may be incomplete)     →  45  (neutral — not low)
+    • Headlines directly contradict the claim                    →   0–30
+
+  ► If Type D (OPINION / OTHER):
+    • Score in 50–70 range unless the claim is clearly false or harmful misinformation.
+
+STEP 2 — Output ONLY this, with no extra text:
+Credibility Score: <0-100>
+Reason: <one sentence explaining the score>
+────────────────────────────────────────────────
 """.strip()
+
 
 _RE_SCORE  = re.compile(r"Credibility Score:\s*\**(\d+)\**", re.IGNORECASE)
 _RE_REASON = re.compile(r"Reason:\s*(.*)", re.IGNORECASE | re.DOTALL)
@@ -97,8 +124,10 @@ def _get_embedding(text: str) -> list[float]:
     return embedding.tolist()
 
 
-def retrieve(query: str, top_n: int = 10) -> tuple[list[str], list[str]]:
-    """Embed the query and retrieve similar docs from ChromaDB."""
+def retrieve(query: str, top_n: int = 10) -> tuple[list[str], list[str], list[float]]:
+    """Embed the query and retrieve similar docs from ChromaDB.
+    Returns: (clean_docs, reference_links, similarity_scores)
+    """
     qe = _get_embedding(query)
     results = collection.query(
         query_embeddings=[qe], n_results=top_n, include=["documents", "distances"]
@@ -109,15 +138,50 @@ def retrieve(query: str, top_n: int = 10) -> tuple[list[str], list[str]]:
 
     filtered_docs = []
     filtered_links = []
-    
+    filtered_scores = []
+
     for doc, distance in zip(docs, distances):
         if distance is not None and (1 - distance) >= COSINE_THRESHOLD:
-            filtered_docs.append(doc)
-            link = extract_reference_link(doc)
+            similarity = round(1 - distance, 4)
+            clean_doc = _sanitize_doc(doc)
+            filtered_docs.append(clean_doc)
+            filtered_scores.append(similarity)
+            link = extract_reference_link(doc)  # extract from raw before sanitizing
             if link:
                 filtered_links.append(link)
 
-    return filtered_docs, filtered_links
+    return filtered_docs, filtered_links, filtered_scores
+
+
+def _sanitize_doc(doc: str) -> str:
+    """Convert stored docs to clean LLM-readable text.
+
+    Handles both old format (json.dumps of full item with encoded URLs)
+    and new format (plain text Title/Source/Link string).
+    """
+    if not doc:
+        return ""
+
+    # Try to parse as JSON (old format: {title, link, source, pubDate})
+    try:
+        parsed = json.loads(doc)
+        if isinstance(parsed, dict):
+            parts = []
+            if parsed.get("title"):
+                parts.append(f"Title: {parsed['title']}")
+            if parsed.get("source"):
+                parts.append(f"Source: {parsed['source']}")
+            if parsed.get("pubDate"):
+                parts.append(f"Published: {parsed['pubDate']}")
+            # Deliberately omit 'link' — it's a base64-encoded Google News
+            # redirect URL that looks like garbage to the LLM
+            return "\n".join(parts) if parts else doc
+    except (json.JSONDecodeError, TypeError):
+        pass
+
+    # Already plain text (new format) — strip any raw URLs to keep it clean
+    clean = URL_PATTERN.sub("[link]", doc)
+    return clean.strip()
 
 
 def extract_reference_link(doc):
@@ -163,15 +227,17 @@ def _parse_model_response(content: str) -> tuple[Optional[int], str]:
     return score, reason
 
 
-def check_credibility(snippets: str) -> CredibilityResult:
+def check_credibility(claim: str, snippets: str) -> CredibilityResult:
     if not MISTRAL_API_KEY:
         raise RuntimeError(
             "MISTRAL_API_KEY is not set. Please define it in your environment or .env file."
         )
 
+    prompt = PROMPT_TEMPLATE.replace("{{claim}}", claim).replace("{{snippets}}", snippets)
+
     payload = {
         "model": MISTRAL_MODEL,
-        "messages": [{"role": "user", "content": PROMPT_TEMPLATE.format(content=snippets)}],
+        "messages": [{"role": "user", "content": prompt}],
         "temperature": 0,
     }
 
@@ -191,8 +257,12 @@ def check_credibility(snippets: str) -> CredibilityResult:
 
     data = response.json()
     content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+
+    print(f"[PHNX] claim   : {claim[:120]}")
+    print(f"[PHNX] snippets: {snippets[:300]}")
+    print(f"[PHNX] response: {content}")
+
     score, reason = _parse_model_response(content)
-    # article will be filled in api_check, we just keep the structure here
     return CredibilityResult(article="", snippets=snippets, score=score, reason=reason)
 
 
@@ -220,9 +290,27 @@ def api_check():
             top_n = 3
 
         # Use the article text as the query into your vector DB
-        documents, reference_links = retrieve(article, top_n=top_n)
-        snippets = " ".join(documents) if documents else ""
-        result = check_credibility(snippets or article)
+        documents, reference_links, similarity_scores = retrieve(article, top_n=top_n)
+
+        if not documents:
+            payload = {
+                "article": article[:DEFAULT_TRUNCATION],
+                "snippets": "",
+                "score": 50,
+                "reason": "No matching articles were found in the knowledge base to verify this claim. "
+                          "The score is neutral (50/100) — populate the database with news articles "
+                          "to enable accurate credibility checking.",
+                "documents": [],
+            }
+            return jsonify(payload)
+
+        # Annotate each snippet with its cosine similarity for the LLM
+        annotated = []
+        for doc, score in zip(documents, similarity_scores):
+            annotated.append(f"[Similarity: {score:.2f}]\n{doc}")
+        snippets = "\n\n".join(annotated)
+
+        result = check_credibility(article, snippets)
 
         payload = result.serialize()
         payload["article"] = article[:DEFAULT_TRUNCATION]
