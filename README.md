@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # Phnx - AI-Powered News Credibility Verification
 
 Phnx is an intelligent system designed to combat misinformation by verifying the credibility of news claims using advanced AI and a curated database of real news articles.
@@ -109,4 +108,3 @@ python embedding/embedding.py
 python transformer/app.py
 python app.py
 ```
->>>>>>> 72b1981ad4c4d0f6aa58ae2f9463bc1e686a3bfa
