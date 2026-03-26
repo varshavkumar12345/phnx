@@ -21,7 +21,7 @@ Phnx is an intelligent system designed to combat misinformation by verifying the
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/varshavkumar12345/phnx
    cd phnx
    ```
 
