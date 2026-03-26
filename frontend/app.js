@@ -13,9 +13,9 @@ const LIMIT       = 20;
 const POLL_MS     = 3000;
 
 /* ─── Init ─────────────────────────────────────────────────── */
-document.addEventListener('DOMContentLoaded', async () => {
-  await checkAuth();       // try to restore session — non-blocking
-  loadFeed(true);          // always load feed, auth or not
+document.addEventListener('DOMContentLoaded', async function() {
+  await checkAuth();
+  loadFeed(true);
   startPolling();
   setupNavigation();
 });
@@ -23,67 +23,57 @@ document.addEventListener('DOMContentLoaded', async () => {
 /* ─── Check Session ─────────────────────────────────────────── */
 async function checkAuth() {
   try {
-    const res = await fetch(`${API}/api/me`, { credentials: 'include' });
+    var res = await fetch(API + '/api/me', { credentials: 'include' });
     if (res.ok) {
       currentUser = await res.json();
       onUserLoggedIn();
     } else {
       onUserGuest();
     }
-  } catch {
+  } catch (e) {
     onUserGuest();
   }
 }
 
 /* ─── UI State: Logged In ────────────────────────────────────── */
 function onUserLoggedIn() {
-  const avatar = currentUser.avatar ||
-    `https://api.dicebear.com/7.x/lorelei/svg?seed=${currentUser.username}`;
+  var avatar = (currentUser.avatar) ||
+    'https://api.dicebear.com/7.x/lorelei/svg?seed=' + currentUser.username;
 
-  // Sidebar: show user, hide guest
   document.getElementById('sidebar-user').classList.remove('hidden');
   document.getElementById('sidebar-guest').classList.add('hidden');
   document.getElementById('nav-profile').classList.remove('hidden');
   document.getElementById('sidebar-avatar').src = avatar;
   document.getElementById('sidebar-username').textContent = '@' + currentUser.username;
 
-  // Feed: show compose, hide guest CTA
   document.getElementById('compose-box').classList.remove('hidden');
   document.getElementById('guest-cta').classList.add('hidden');
   document.getElementById('compose-avatar').src = avatar;
 
-  // Profile view data
   document.getElementById('profile-avatar').src = avatar;
   document.getElementById('profile-username').textContent = currentUser.username;
   document.getElementById('profile-handle').textContent   = '@' + currentUser.username;
 
-  // Always go to Home tab so user sees ALL posts
   switchView('feed');
 }
 
 /* ─── UI State: Guest ────────────────────────────────────────── */
 function onUserGuest() {
-  // Sidebar: hide user, show guest sign-in button
   document.getElementById('sidebar-user').classList.add('hidden');
   document.getElementById('sidebar-guest').classList.remove('hidden');
   document.getElementById('nav-profile').classList.add('hidden');
-
-  // Feed: hide compose, show guest CTA
   document.getElementById('compose-box').classList.add('hidden');
   document.getElementById('guest-cta').classList.remove('hidden');
 }
 
 /* ─── Auth Modal ─────────────────────────────────────────────── */
-function openAuthModal(tab = 'login') {
+function openAuthModal(tab) {
+  tab = tab || 'login';
   switchTab(tab);
   clearErrors();
   document.getElementById('auth-modal').classList.remove('hidden');
-
-  // Update tagline based on context
-  const tagline = document.getElementById('auth-tagline');
-  tagline.textContent = tab === 'register'
-    ? 'Create an account to start posting'
-    : 'Sign in to post a thread';
+  document.getElementById('auth-tagline').textContent =
+    tab === 'register' ? 'Create an account to start posting' : 'Sign in to post a thread';
 }
 
 function closeAuthModal() {
@@ -95,10 +85,10 @@ function closeModalOnBackdrop(e) {
 }
 
 function switchTab(tab) {
-  const loginForm = document.getElementById('login-form');
-  const regForm   = document.getElementById('register-form');
-  const tabLogin  = document.getElementById('tab-login');
-  const tabReg    = document.getElementById('tab-register');
+  var loginForm = document.getElementById('login-form');
+  var regForm   = document.getElementById('register-form');
+  var tabLogin  = document.getElementById('tab-login');
+  var tabReg    = document.getElementById('tab-register');
 
   if (tab === 'login') {
     loginForm.classList.remove('hidden');
@@ -117,23 +107,22 @@ function switchTab(tab) {
 /* ─── Login ──────────────────────────────────────────────────── */
 async function handleLogin(e) {
   e.preventDefault();
-  const btn      = document.getElementById('login-btn');
-  const errEl    = document.getElementById('login-error');
-  const username = document.getElementById('login-username').value.trim();
-  const password = document.getElementById('login-password').value;
+  var btn      = document.getElementById('login-btn');
+  var errEl    = document.getElementById('login-error');
+  var username = document.getElementById('login-username').value.trim();
+  var password = document.getElementById('login-password').value;
 
   clearErrors();
   setLoading(btn, true);
 
   try {
-    const res  = await fetch(`${API}/api/login`, {
+    var res  = await fetch(API + '/api/login', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username: username, password: password })
     });
-    const data = await res.json();
+    var data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Login failed');
-
     currentUser = data.user;
     closeAuthModal();
     onUserLoggedIn();
@@ -148,28 +137,27 @@ async function handleLogin(e) {
 /* ─── Register ───────────────────────────────────────────────── */
 async function handleRegister(e) {
   e.preventDefault();
-  const btn      = document.getElementById('register-btn');
-  const errEl    = document.getElementById('register-error');
-  const username = document.getElementById('reg-username').value.trim();
-  const email    = document.getElementById('reg-email').value.trim();
-  const password = document.getElementById('reg-password').value;
+  var btn      = document.getElementById('register-btn');
+  var errEl    = document.getElementById('register-error');
+  var username = document.getElementById('reg-username').value.trim();
+  var email    = document.getElementById('reg-email').value.trim();
+  var password = document.getElementById('reg-password').value;
 
   clearErrors();
   setLoading(btn, true);
 
   try {
-    const res  = await fetch(`${API}/api/register`, {
+    var res  = await fetch(API + '/api/register', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, email, password })
+      body: JSON.stringify({ username: username, email: email, password: password })
     });
-    const data = await res.json();
+    var data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Registration failed');
-
     currentUser = data.user;
     closeAuthModal();
     onUserLoggedIn();
-    showToast('Welcome to PHNX, @' + currentUser.username + ' 🎉', 'success');
+    showToast('Welcome to PHNX, @' + currentUser.username + ' ✨', 'success');
   } catch (err) {
     showError(errEl, err.message);
   } finally {
@@ -180,12 +168,11 @@ async function handleRegister(e) {
 /* ─── Logout ─────────────────────────────────────────────────── */
 async function handleLogout() {
   stopPolling();
-  await fetch(`${API}/api/logout`, { method: 'POST', credentials: 'include' });
+  await fetch(API + '/api/logout', { method: 'POST', credentials: 'include' });
   currentUser  = null;
   currentPage  = 1;
   totalThreads = 0;
   latestId     = 0;
-
   onUserGuest();
   switchView('feed');
   loadFeed(true);
@@ -195,11 +182,11 @@ async function handleLogout() {
 
 /* ─── Navigation ─────────────────────────────────────────────── */
 function setupNavigation() {
-  document.getElementById('nav-feed').addEventListener('click', e => {
+  document.getElementById('nav-feed').addEventListener('click', function(e) {
     e.preventDefault();
     switchView('feed');
   });
-  document.getElementById('nav-profile').addEventListener('click', e => {
+  document.getElementById('nav-profile').addEventListener('click', function(e) {
     e.preventDefault();
     if (!currentUser) return openAuthModal('login');
     switchView('profile');
@@ -208,14 +195,15 @@ function setupNavigation() {
 }
 
 function switchView(view) {
-  document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById(`view-${view}`).classList.remove('hidden');
-  document.getElementById(`nav-${view}`)?.classList.add('active');
+  document.querySelectorAll('.view').forEach(function(v) { v.classList.add('hidden'); });
+  document.querySelectorAll('.nav-item').forEach(function(n) { n.classList.remove('active'); });
+  document.getElementById('view-' + view).classList.remove('hidden');
+  var navEl = document.getElementById('nav-' + view);
+  if (navEl) navEl.classList.add('active');
 }
 
 /* ─── Feed (public — no auth needed) ────────────────────────── */
-async function loadFeed(reset = false) {
+async function loadFeed(reset) {
   if (isLoading) return;
   if (reset) {
     currentPage  = 1;
@@ -228,29 +216,25 @@ async function loadFeed(reset = false) {
 
   isLoading = true;
   try {
-    const res  = await fetch(`${API}/api/threads?page=${currentPage}&limit=${LIMIT}`, {
-      credentials: 'include'   // sends session cookie if present (for liked state)
+    var res  = await fetch(API + '/api/threads?page=' + currentPage + '&limit=' + LIMIT, {
+      credentials: 'include'
     });
-    const data = await res.json();
+    var data = await res.json();
     totalThreads = data.total;
     document.getElementById('feed-loading').classList.add('hidden');
 
-    const feed = document.getElementById('threads-feed');
+    var feed = document.getElementById('threads-feed');
 
     if (data.threads.length === 0 && currentPage === 1) {
-      feed.innerHTML = `
-        <div class="empty-state">
-          <span class="empty-icon">✨</span>
-          <p>No threads yet. Be the first to post!</p>
-        </div>`;
+      feed.innerHTML = '<div class="empty-state"><span class="empty-icon">✨</span><p>No threads yet. Be the first to post!</p></div>';
     } else {
-      data.threads.forEach(t => {
+      data.threads.forEach(function(t) {
         feed.appendChild(buildThreadCard(t));
         if (t.id > latestId) latestId = t.id;
       });
     }
 
-    const loaded = (currentPage - 1) * LIMIT + data.threads.length;
+    var loaded = (currentPage - 1) * LIMIT + data.threads.length;
     if (loaded < totalThreads) {
       document.getElementById('load-more-wrap').classList.remove('hidden');
     } else {
@@ -272,23 +256,23 @@ async function loadMore() { await loadFeed(false); }
 async function postThread() {
   if (!currentUser) return openAuthModal('login');
 
-  const input   = document.getElementById('compose-input');
-  const content = input.value.trim();
+  var input   = document.getElementById('compose-input');
+  var content = input.value.trim();
 
   if (!content) return showToast('Write something first!', 'error');
   if (content.length > 500) return showToast('Too long! Max 500 characters.', 'error');
 
-  const btn = document.getElementById('post-btn');
+  var btn = document.getElementById('post-btn');
   btn.disabled = true;
-  btn.innerHTML = `<div class="btn-spinner"></div>`;
+  btn.innerHTML = '<div class="btn-spinner"></div>';
 
   try {
-    const res  = await fetch(`${API}/api/threads`, {
+    var res  = await fetch(API + '/api/threads', {
       method: 'POST', credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content })
+      body: JSON.stringify({ content: content })
     });
-    const data = await res.json();
+    var data = await res.json();
     if (!res.ok) throw new Error(data.error || 'Post failed');
 
     input.value = '';
@@ -296,8 +280,8 @@ async function postThread() {
     document.getElementById('char-count').textContent = '500';
     document.getElementById('char-count').className = 'char-count';
 
-    const feed  = document.getElementById('threads-feed');
-    const empty = feed.querySelector('.empty-state');
+    var feed  = document.getElementById('threads-feed');
+    var empty = feed.querySelector('.empty-state');
     if (empty) empty.remove();
     feed.insertBefore(buildThreadCard(data), feed.firstChild);
     totalThreads++;
@@ -316,21 +300,21 @@ async function postThread() {
 async function toggleLike(threadId, btn) {
   if (!currentUser) return openAuthModal('login');
 
-  const countEl = btn.querySelector('.like-count');
-  const isLiked = btn.classList.contains('liked');
+  var countEl = btn.querySelector('.like-count');
+  var isLiked = btn.classList.contains('liked');
 
   btn.classList.toggle('liked');
   countEl.textContent = parseInt(countEl.textContent) + (isLiked ? -1 : 1);
 
   try {
-    const res  = await fetch(`${API}/api/threads/${threadId}/like`, {
+    var res  = await fetch(API + '/api/threads/' + threadId + '/like', {
       method: 'POST', credentials: 'include'
     });
-    const data = await res.json();
+    var data = await res.json();
     if (!res.ok) throw new Error(data.error);
     countEl.textContent = data.like_count;
     if (data.liked) btn.classList.add('liked'); else btn.classList.remove('liked');
-  } catch {
+  } catch (e) {
     btn.classList.toggle('liked');
     countEl.textContent = parseInt(countEl.textContent) + (isLiked ? 1 : -1);
     showToast('Could not toggle like', 'error');
@@ -341,14 +325,14 @@ async function toggleLike(threadId, btn) {
 async function deleteThread(threadId, cardEl) {
   if (!confirm('Delete this thread?')) return;
   try {
-    const res = await fetch(`${API}/api/threads/${threadId}`, {
+    var res = await fetch(API + '/api/threads/' + threadId, {
       method: 'DELETE', credentials: 'include'
     });
     if (!res.ok) throw new Error('Delete failed');
     cardEl.style.transition = 'all 0.3s ease';
     cardEl.style.opacity    = '0';
     cardEl.style.transform  = 'translateX(-20px)';
-    setTimeout(() => cardEl.remove(), 300);
+    setTimeout(function() { cardEl.remove(); }, 300);
     showToast('Thread deleted', 'success');
     totalThreads--;
   } catch (err) {
@@ -358,63 +342,124 @@ async function deleteThread(threadId, cardEl) {
 
 /* ─── Profile Threads ────────────────────────────────────────── */
 async function loadProfileThreads() {
-  const container = document.getElementById('profile-threads');
-  container.innerHTML = `<div class="loading-state"><div class="spinner"></div><p>Loading…</p></div>`;
+  var container = document.getElementById('profile-threads');
+  container.innerHTML = '<div class="loading-state"><div class="spinner"></div><p>Loading...</p></div>';
   try {
-    const res  = await fetch(`${API}/api/threads?limit=100`, { credentials: 'include' });
-    const data = await res.json();
-    const mine = data.threads.filter(t => t.user_id === currentUser.id);
+    var res  = await fetch(API + '/api/threads?limit=100', { credentials: 'include' });
+    var data = await res.json();
+    var mine = data.threads.filter(function(t) { return t.user_id === currentUser.id; });
     document.getElementById('stat-threads').textContent = mine.length;
     container.innerHTML = '';
     if (mine.length === 0) {
-      container.innerHTML = `<div class="empty-state"><span class="empty-icon">📝</span><p>No threads yet. Share something!</p></div>`;
+      container.innerHTML = '<div class="empty-state"><span class="empty-icon">📝</span><p>No threads yet. Share something!</p></div>';
     } else {
-      mine.forEach(t => container.appendChild(buildThreadCard(t)));
+      mine.forEach(function(t) { container.appendChild(buildThreadCard(t)); });
     }
-  } catch {
-    container.innerHTML = `<div class="empty-state"><p>Failed to load threads.</p></div>`;
+  } catch (e) {
+    container.innerHTML = '<div class="empty-state"><p>Failed to load threads.</p></div>';
   }
 }
 
 /* ─── Build Thread Card ──────────────────────────────────────── */
 function buildThreadCard(thread) {
-  const isOwn = currentUser && thread.user_id === currentUser.id;
-  const card  = document.createElement('div');
+  var isOwn = currentUser && thread.user_id === currentUser.id;
+  var card  = document.createElement('div');
   card.className = 'thread-card';
-  card.id        = `thread-${thread.id}`;
+  card.id        = 'thread-' + thread.id;
 
-  card.innerHTML = `
-    <div class="thread-avatar-wrap">
-      <img class="thread-avatar" src="${thread.avatar}" alt="${thread.username}" loading="lazy"/>
-    </div>
-    <div class="thread-body">
-      <div class="thread-header">
-        <span class="thread-username">@${escHtml(thread.username)}</span>
-        <span class="thread-time">${formatTime(thread.created_at)}</span>
-      </div>
-      <p class="thread-content">${escHtml(thread.content)}</p>
-      <div class="thread-actions">
-        <button class="action-btn like-btn ${thread.liked ? 'liked' : ''}"
-                id="like-btn-${thread.id}"
-                onclick="toggleLike(${thread.id}, this)">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${thread.liked ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"/>
-          </svg>
-          <span class="like-count">${thread.like_count}</span>
-        </button>
-        ${isOwn ? `
-          <button class="action-btn delete-btn" onclick="deleteThread(${thread.id}, document.getElementById('thread-${thread.id}'))" title="Delete thread">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/>
-            </svg>
-          </button>` : ''}
-      </div>
-    </div>`;
+  var likedFill  = thread.liked ? 'currentColor' : 'none';
+  var likedClass = thread.liked ? 'liked' : '';
+
+  var deleteBtnHtml = '';
+  if (isOwn) {
+    deleteBtnHtml =
+      '<button class="action-btn delete-btn" onclick="deleteThread(' + thread.id + ', document.getElementById(\'thread-' + thread.id + '\'))" title="Delete thread">' +
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+          '<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"/>' +
+        '</svg>' +
+      '</button>';
+  }
+
+  card.innerHTML =
+    '<div class="thread-avatar-wrap">' +
+      '<img class="thread-avatar" src="' + thread.avatar + '" alt="' + escHtml(thread.username) + '" loading="lazy"/>' +
+    '</div>' +
+    '<div class="thread-body">' +
+      '<div class="thread-header">' +
+        '<span class="thread-username">@' + escHtml(thread.username) + '</span>' +
+        '<button class="btn-info-score" id="score-btn-' + thread.id + '" onclick="fetchScore(' + thread.id + ', this)">information score</button>' +
+        '<span class="thread-time">' + formatTime(thread.created_at) + '</span>' +
+      '</div>' +
+      '<p class="thread-content">' + escHtml(thread.content) + '</p>' +
+      '<div id="score-popup-' + thread.id + '" class="score-popup hidden"></div>' +
+      '<div class="thread-actions">' +
+        '<button class="action-btn like-btn ' + likedClass + '" id="like-btn-' + thread.id + '" onclick="toggleLike(' + thread.id + ', this)">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="' + likedFill + '" stroke="currentColor" stroke-width="2">' +
+            '<path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"/>' +
+          '</svg>' +
+          '<span class="like-count">' + thread.like_count + '</span>' +
+        '</button>' +
+        deleteBtnHtml +
+      '</div>' +
+    '</div>';
 
   return card;
 }
 
-/* ─── Live Polling (auto-inject, no auth needed) ─────────────── */
+/* ─── Information Score ──────────────────────────────────────── */
+async function fetchScore(threadId, btn) {
+  var card    = document.getElementById('thread-' + threadId);
+  var content = card.querySelector('.thread-content').textContent;
+  var popup   = document.getElementById('score-popup-' + threadId);
+
+  // Toggle off if already open
+  if (!popup.classList.contains('hidden')) {
+    popup.classList.add('hidden');
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'checking...';
+
+  try {
+    var res  = await fetch(API + '/api/score', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content })
+    });
+    var data = await res.json();
+
+    if (!res.ok || data.error) {
+      popup.innerHTML = '<div class="score-error">' + escHtml(data.error || 'Failed to get score') + '</div>';
+    } else {
+      var score  = data.score;
+      var reason = data.reason;
+      var color  = score >= 70 ? '#22c55e' : score >= 40 ? '#f59e0b' : '#f43f5e';
+      var label  = score >= 70 ? 'Credible' : score >= 40 ? 'Uncertain' : 'Low credibility';
+
+      popup.innerHTML =
+        '<div class="score-header">' +
+          '<span class="score-label">' + escHtml(label) + '</span>' +
+          '<span class="score-number" style="color:' + color + '">' + score + ' / 100</span>' +
+        '</div>' +
+        '<div class="score-bar-wrap">' +
+          '<div class="score-bar-track">' +
+            '<div class="score-bar-fill" style="width:' + score + '%;background:' + color + '"></div>' +
+          '</div>' +
+        '</div>' +
+        '<p class="score-reason">' + escHtml(reason) + '</p>';
+    }
+    popup.classList.remove('hidden');
+  } catch (err) {
+    popup.innerHTML = '<div class="score-error">' + escHtml(err.message) + '</div>';
+    popup.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'information score';
+  }
+}
+
+/* ─── Live Polling ───────────────────────────────────────────── */
 function startPolling() {
   stopPolling();
   pollInterval = setInterval(pollNewThreads, POLL_MS);
@@ -424,20 +469,18 @@ function stopPolling() {
   if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
 }
 
-async function pollNewThreads() { // newest-on-top fix applied
-  const feedView = document.getElementById('view-feed');
+async function pollNewThreads() {
+  var feedView = document.getElementById('view-feed');
   if (!feedView || feedView.classList.contains('hidden')) return;
-  // Note: latestId=0 is intentional — since_id=0 returns ALL threads,
-  // which is correct when the feed starts empty.
 
   try {
-    const res  = await fetch(`${API}/api/threads?since_id=${latestId}`, { credentials: 'include' });
+    var res  = await fetch(API + '/api/threads?since_id=' + latestId, { credentials: 'include' });
     if (!res.ok) return;
-    const data = await res.json();
+    var data = await res.json();
     if (!data.threads || data.threads.length === 0) return;
 
-    const feed  = document.getElementById('threads-feed');
-    const empty = feed.querySelector('.empty-state');
+    var feed  = document.getElementById('threads-feed');
+    var empty = feed.querySelector('.empty-state');
     if (empty) empty.remove();
 
     // API returns ASC (oldest first). insertBefore each: newest inserted last => lands on top.
@@ -450,9 +493,8 @@ async function pollNewThreads() { // newest-on-top fix applied
       if (t.id > latestId) latestId = t.id;
     });
 
-
     totalThreads += data.threads.length;
-  } catch { /* ignore */ }
+  } catch (e) { /* ignore */ }
 }
 
 /* ─── Helpers ────────────────────────────────────────────────── */
@@ -462,21 +504,21 @@ function autoResize(el) {
 }
 
 function updateCharCount(el) {
-  const remaining = 500 - el.value.length;
-  const el2 = document.getElementById('char-count');
+  var remaining = 500 - el.value.length;
+  var el2 = document.getElementById('char-count');
   el2.textContent = remaining;
   el2.className = 'char-count' + (remaining < 50 ? (remaining < 20 ? ' danger' : ' warning') : '');
 }
 
 function formatTime(isoStr) {
   if (!isoStr) return '';
-  const d    = new Date(isoStr.replace(' ', 'T') + 'Z');
-  const now  = new Date();
-  const diff = Math.floor((now - d) / 1000);
+  var d    = new Date(isoStr.replace(' ', 'T') + 'Z');
+  var now  = new Date();
+  var diff = Math.floor((now - d) / 1000);
   if (diff < 60)    return 'just now';
-  if (diff < 3600)  return `${Math.floor(diff/60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-  if (diff < 604800)return `${Math.floor(diff/86400)}d ago`;
+  if (diff < 3600)  return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  if (diff < 604800)return Math.floor(diff/86400) + 'd ago';
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
@@ -490,8 +532,10 @@ function escHtml(str) {
 
 function setLoading(btn, loading) {
   btn.disabled = loading;
-  btn.querySelector('span')?.classList.toggle('hidden', loading);
-  btn.querySelector('.btn-spinner')?.classList.toggle('hidden', !loading);
+  var span    = btn.querySelector('span');
+  var spinner = btn.querySelector('.btn-spinner');
+  if (span)    span.classList.toggle('hidden', loading);
+  if (spinner) spinner.classList.toggle('hidden', !loading);
 }
 
 function showError(el, msg) {
@@ -500,19 +544,20 @@ function showError(el, msg) {
 }
 
 function clearErrors() {
-  document.querySelectorAll('.form-error').forEach(el => {
+  document.querySelectorAll('.form-error').forEach(function(el) {
     el.classList.add('hidden');
     el.textContent = '';
   });
 }
 
-let toastTimer;
-function showToast(msg, type = '') {
-  const toast = document.getElementById('toast');
-  const msgEl = document.getElementById('toast-message');
-  toast.className = `toast ${type}`;
+var toastTimer;
+function showToast(msg, type) {
+  type = type || '';
+  var toast = document.getElementById('toast');
+  var msgEl = document.getElementById('toast-message');
+  toast.className = 'toast ' + type;
   msgEl.textContent = msg;
   toast.classList.remove('hidden');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => toast.classList.add('hidden'), 3200);
+  toastTimer = setTimeout(function() { toast.classList.add('hidden'); }, 3200);
 }

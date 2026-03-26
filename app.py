@@ -4,6 +4,7 @@ import sqlite3
 import hashlib
 import os
 import secrets
+import requests as http_requests
 from datetime import datetime
 
 app = Flask(__name__, static_folder='frontend', static_url_path='')
@@ -300,6 +301,40 @@ def toggle_like(thread_id):
         ).fetchone()['c']
 
     return jsonify({'liked': liked, 'like_count': like_count})
+
+# ─── Information Score (proxies to CredibilityCheckerRAG) ─────────────────────
+
+CREDIBILITY_API = 'http://localhost:8080/api/check'
+
+@app.route('/api/score', methods=['POST'])
+def get_score():
+    data    = request.get_json()
+    content = (data.get('content') or '').strip()
+    if not content:
+        return jsonify({'error': 'No content provided'}), 400
+
+    try:
+        resp = http_requests.post(
+            CREDIBILITY_API,
+            json={'text': content, 'top_n': 3},
+            timeout=30
+        )
+        if resp.status_code == 200:
+            result = resp.json()
+            return jsonify({
+                'score':  result.get('score'),
+                'reason': result.get('reason', 'No reason provided.')
+            })
+        else:
+            return jsonify({'error': f'Checker returned {resp.status_code}'}), 502
+    except http_requests.exceptions.ConnectionError:
+        # CredibilityChecker not running — return informative error
+        return jsonify({
+            'error': 'CredibilityCheckerRAG service is not running on port 8080. '
+                     'Start it first: cd C:\\Codes\\Projects\\CredibilityCheckerRAG\\v3.0\\transformer && python app.py'
+        }), 503
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ─── Serve Frontend ────────────────────────────────────────────────────────────
 
